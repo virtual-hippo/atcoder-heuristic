@@ -1,0 +1,133 @@
+# Path to the test file (Liquid template)
+#
+# Variables:
+#
+# - `manifest_dir`: Package directory
+# - `contest`:      Contest ID (e.g. "abc100")
+# - `bin_name`:     Name of a `bin` target (e.g. "abc100-a")
+# - `bin_alias`:    "Alias" for a `bin` target defined in `pacakge.metadata.cargo-compete` (e.g. "a")
+# - `problem`:      Alias for `bin_alias` (deprecated)
+#
+# Additional filters:
+#
+# - `kebabcase`: Convert to kebab case (by using the `heck` crate)
+test-suite = "{{ manifest_dir }}/testcases/{{ bin_alias }}.yml"
+
+# Open files with the command (`jq` command that outputs `string[] | string[][]`)
+#
+# VSCode:
+#open = '[["code", "-a", .manifest_dir], ["code"] + (.paths | map([.src, .test_suite]) | flatten)]'
+# Emacs:
+#open = '["emacsclient", "-n"] + (.paths | map([.src, .test_suite]) | flatten)'
+
+[template]
+src = '''
+#![allow(unused_imports)]
+use ac_library::*;
+use itertools::*;
+use proconio::{fastout, input, marker::Chars};
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::{VecDeque, HashMap, HashSet};
+use superslice::Ext;
+
+#[fastout]
+fn main() {
+    input! {
+        n: usize,
+    }
+
+    let ans = 0;
+    println!("{}", ans);
+}
+
+'''
+
+[template.new]
+# `edition` for `Cargo.toml`.
+edition = "2021"
+# `profile` for `Cargo.toml`.
+#
+# By setting this, you can run tests with `opt-level=3` while enabling `debug-assertions` and `overflow-checks`.
+#profile = '''
+#[dev]
+#opt-level = 3
+#'''
+dependencies = '''
+proconio = { version = "=0.4.5", features = ["derive"] }
+ac-library-rs = "=0.1.1"
+superslice = "1.0.0"
+itertools = "=0.11.0"
+num = "=0.4.1"
+num-bigint = "=0.4.3"
+num-complex = "=0.4.3"
+num-integer = "=0.1.45"
+num-iter = "=0.1.43"
+num-rational = "=0.4.1"
+num-traits = "=0.2.15"
+num-derive = "=0.4.0"
+rustc-hash = "=1.1.0"
+rand = "=0.8.5"
+'''
+dev-dependencies = '''
+#atcoder-202004-lock = { git = "https://github.com/qryxip/atcoder-202004-lock" }
+'''
+
+[template.new.copy-files]
+
+[new]
+kind = "cargo-compete"
+# Platform
+#
+# - atcoder
+# - codeforces
+# - yukicoder
+platform = "atcoder"
+# Path (Liquid template)
+#
+# Variables:
+#
+# - `contest`:      Contest ID. **May be nil**
+# - `package_name`: Package name
+path = "./{{ contest }}"
+
+#[new]
+#kind = "oj-api"
+#url = "https://atcoder.jp/contests/{{ id }}"
+#path = "./{{ contest }}"
+
+# for Library-Checker
+#[add]
+#url = "https://judge.yosupo.jp/problem/{{ args[0] }}"
+##is-contest = ["false"] # optional
+##target-kind = "bin" # ["bin", "example"]. default to "bin"
+#bin-name = '{{ args[0] }}'
+##bin-alias = '{{ args[0] }}' # optional
+##bin-src-path = './src/bin/{{ bin_alias }}.rs' # optional
+
+# for yukicoder
+#[add]
+#url = '{% case args[0] %}{% when "contest" %}https://yukicoder.me/contests/{{ args[1] }}{% when "problem" %}https://yukicoder.me/problems/no/{{ args[1] }}{% endcase %}'
+#is-contest = ["bash", "-c", '[[ $(cut -d / -f 4) == "contests" ]]'] # optional
+##target-kind = "bin" # ["bin", "example"]. default to "bin"
+#bin-name = '{% assign segments = url | split: "/" %}{{ segments[5] }}'
+##bin-alias = '{% assign segments = url | split: "/" %}{{ segments[5] }}' # optional
+##bin-src-path = './src/bin/{{ bin_alias }}.rs' # optional
+
+[test]
+# Toolchain for the test. (optional)
+#toolchain = "1.42.0"
+toolchain = "1.70.0"
+# Profile for `cargo build`. ("dev" | "release")
+#
+# Defaults to `"dev"`.
+#profile = "dev"
+
+[submit]
+kind = "file"
+path = "{{ src_path }}"
+#language_id = "4050"
+language_id = "5054"
+#[submit]
+#kind = "command"
+#args = ["cargo", "equip", "--exclude-atcoder-crates", "--resolve-cfgs", "--remove", "docs", "--minify", "libs", "--rustfmt", "--check", "--bin", "{{ bin_name }}"]
+#language_id = "4050"

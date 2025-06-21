@@ -1,0 +1,8 @@
+target/
+.cargo/
+testcases/
+*.txt
+
+# バージョン管理不要のため ignore
+Cargo.toml
+Cargo.lock
