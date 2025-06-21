@@ -46,7 +46,7 @@ struct Info {
 impl Info {
     fn new() -> Self {
         Self {
-            time_limit: Duration::from_millis(1920),
+            time_limit: Duration::from_millis(1960),
             start_time: Instant::now(),
             best_answer: (0, vec![]),
         }
@@ -90,6 +90,7 @@ pub struct Cardboard(i64, i64);
 #[derive(Clone)]
 pub struct State {
     t: usize,
+    carried: usize,
     office: Vec<Vec<Option<Cardboard>>>,
     // 現在持っている cardboards
     takahashi_cardboards: Vec<Cardboard>,
@@ -114,6 +115,7 @@ impl State {
 
         Self {
             t: 0,
+            carried: 0,
             office,
             takahashi_cardboards,
             pos: GATE,
@@ -292,11 +294,23 @@ fn solve(state: &mut State) {
         // 出入り口に戻る
         while state.pos != GATE {
             move_x_or_y(GATE, state);
+
+            if state.carried < 40 {
+                let rnd_val = state.rng.gen_range(0..100);
+                if let Some(cardboard) = &state.office[state.pos.x][state.pos.y] {
+                    if rnd_val < 95 {
+                        lift_cargeboard(state, *cardboard);
+                    }
+                }
+                continue;
+            }
+
             if let Some(cardboard) = &state.office[state.pos.x][state.pos.y] {
                 lift_cargeboard(state, *cardboard);
             }
         }
 
+        state.carried += state.takahashi_cardboards.len();
         state.takahashi_cardboards = vec![];
     }
 }
