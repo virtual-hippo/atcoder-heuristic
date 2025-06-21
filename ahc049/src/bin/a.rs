@@ -217,6 +217,31 @@ fn manhattan_distance(state: &State) -> usize {
     dx + dy
 }
 
+fn lift_cargeboard(state: &mut State) {
+    // 段ボールがある場合のみチェック
+    if let Some(cardboard) = &state.office[state.pos.x][state.pos.y] {
+        // 持っている段ボール数が指定の範囲の場合のみ比較
+        if 0 < state.takahashi_cardboards.len() && state.takahashi_cardboards.len() < 8 {
+            let dist = manhattan_distance(state) as i64;
+            let cardboard_weight = cardboard.0;
+
+            let can_lift = state
+                .takahashi_cardboards
+                .iter()
+                .map(|Cardboard(_, d)| *d)
+                .all(|d| d > cardboard_weight * dist);
+
+            // 持っている段ボールの耐久力が十分なら持ち上げる
+            if can_lift {
+                helper::lift(state);
+                for i in 0..state.takahashi_cardboards.len() - 1 {
+                    state.takahashi_cardboards[i].1 -= cardboard_weight * dist;
+                }
+            }
+        }
+    }
+}
+
 fn solve(state: &mut State) {
     while let Some(pos) = serach_cardboard(state) {
         // 目的地までの移動
@@ -230,16 +255,7 @@ fn solve(state: &mut State) {
         // 出入り口に戻る
         while state.pos != GATE {
             move_x_or_y(GATE, state);
-
-            // 段ボールがある場合のみチェック
-            if let Some(cardboard) = &state.office[state.pos.x][state.pos.y] {
-                // 持っている段ボールがある場合のみ比較
-                if state.takahashi_cardboards.len() == 1 {
-                    if cardboard.0 * (manhattan_distance(state) as i64) < state.takahashi_cardboards[0].1 {
-                        helper::lift(state);
-                    }
-                }
-            }
+            lift_cargeboard(state);
         }
 
         state.takahashi_cardboards = vec![];
@@ -263,6 +279,5 @@ fn main() {
     for i in 0..info.best_answer.1.len() {
         println!("{}", info.best_answer.1[i]);
     }
-    eprintln!("len: {}", info.best_answer.1.len());
-    eprintln!("score: {}", info.best_answer.0);
+    // eprintln!("score: {}", info.best_answer.0);
 }
