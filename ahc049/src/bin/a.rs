@@ -56,10 +56,13 @@ impl Info {
         self.start_time.elapsed() >= self.time_limit
     }
 
-    fn update_best_answer(&mut self, state: &State) {
+    fn update_best_answer(&mut self, state: &State) -> bool {
         let new_score = calculate_score(state);
         if new_score > self.best_answer.0 {
             self.best_answer = (new_score, state.history.clone());
+            true
+        } else {
+            false
         }
     }
 }
@@ -172,18 +175,6 @@ fn serach_cardboard(state: &mut State) -> Option<Pos> {
     None
 }
 
-fn serach_empty_space(state: &mut State) -> Option<Pos> {
-    let Pos { x, y } = state.pos;
-    for i in (0..x).rev() {
-        for j in (0..y).rev() {
-            if state.office[i][j].is_none() && (Pos { x: i, y: j }) != state.pos {
-                return Some(Pos { x: i, y: j });
-            }
-        }
-    }
-    None
-}
-
 fn move_x(state: &mut State, goal: Pos) -> bool {
     let dx = goal.x as isize - state.pos.x as isize;
     if dx > 0 {
@@ -252,37 +243,15 @@ fn lift_cargeboard(state: &mut State, cardboard: Cardboard) {
             }
             return;
         }
-
-        if let Some(empty_pos) = serach_empty_space(state) {
-            let dist = manhattan_distance(state, empty_pos) as i64;
-            let cardboard_weight = cardboard.0;
-
-            let can_lift = state
-                .takahashi_cardboards
-                .iter()
-                .map(|Cardboard(_, d)| *d)
-                .all(|d| d > cardboard_weight * dist);
-
-            if can_lift && dist > 10 {
-                helper::lift(state);
-                for i in 0..state.takahashi_cardboards.len() - 1 {
-                    state.takahashi_cardboards[i].1 -= cardboard_weight * dist;
-                }
-                while state.pos != empty_pos {
-                    move_x_or_y(empty_pos, state);
-                }
-                if state.office[state.pos.x][state.pos.y].is_none() {
-                    // 段ボールを置く
-                    helper::put(state);
-                }
-                return;
-            }
-        }
     }
 }
 
-fn solve(state: &mut State) {
+fn solve(state: &mut State, max_sosa: usize) {
     while let Some(pos) = serach_cardboard(state) {
+        if max_sosa < state.history.len() {
+            break;
+        }
+
         // 目的地までの移動
         while state.pos != pos {
             move_x_or_y(pos, state);
@@ -295,16 +264,6 @@ fn solve(state: &mut State) {
         while state.pos != GATE {
             move_x_or_y(GATE, state);
 
-            if state.carried < 40 {
-                let rnd_val = state.rng.gen_range(0..100);
-                if let Some(cardboard) = &state.office[state.pos.x][state.pos.y] {
-                    if rnd_val < 95 {
-                        lift_cargeboard(state, *cardboard);
-                    }
-                }
-                continue;
-            }
-
             if let Some(cardboard) = &state.office[state.pos.x][state.pos.y] {
                 lift_cargeboard(state, *cardboard);
             }
@@ -316,21 +275,49 @@ fn solve(state: &mut State) {
 }
 
 fn calculate_score(state: &State) -> usize {
-    N * N + 2 * N * N * N - state.t
+    if state.carried == 399 {
+        N * N + 2 * N * N * N - state.t
+    } else {
+        N * N + 2 - (399 - state.carried)
+    }
 }
 
 fn main() {
     let mut info = Info::new();
     let input = Input::from_stdin();
 
-    while !info.is_time_up() {
+    let mut best_state0 = State::new(&input);
+
+    for _ in 0..1000 {
+        if info.is_time_up() {
+            break;
+        }
         let mut state = State::new(&input);
-        solve(&mut state);
+        solve(&mut state, 1200);
+        if state.carried - 2 > best_state0.carried {
+            best_state0 = state.clone();
+        }
+    }
+
+    let mut best_state1 = State::new(&input);
+    for _ in 0..600 {
+        if info.is_time_up() {
+            break;
+        }
+        let mut state = State::new(&input);
+        solve(&mut state, 3200);
+        if state.carried - 3 > best_state1.carried {
+            best_state1 = state.clone();
+        }
+    }
+
+    while !info.is_time_up() {
+        let mut state = best_state0.clone();
+        solve(&mut state, MAX);
         info.update_best_answer(&state);
     }
 
     for i in 0..info.best_answer.1.len() {
         println!("{}", info.best_answer.1[i]);
     }
-    eprintln!("score: {}", info.best_answer.0);
 }
