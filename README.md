@@ -1,2 +1,2 @@
-# atcoder
-atcoder勉強記録用
+# atcoder-heuristic
+AHC のコード記録用
