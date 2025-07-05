@@ -142,6 +142,8 @@ pub mod helper {
         if let Some(cardboard) = state.office[state.pos.x][state.pos.y].take() {
             state.takahashi_cardboards.push(cardboard);
             state.history.push('1');
+        } else {
+            panic!("No cardboard");
         }
     }
 
@@ -171,13 +173,44 @@ pub mod helper {
     }
 }
 
-fn serach_cardboard(state: &mut State, input: &Input) -> Option<Pos> {
-    for &Pos { x, y } in input.pos_list_sorted_by_dist.iter() {
-        if state.office[x][y].is_some() {
-            return Some(Pos { x, y });
-        }
+mod search {
+    use super::*;
+
+    pub fn serach_cardboard(state: &State, input: &Input, end_pos: Pos) -> Option<(Pos, Cardboard)> {
+        find_cardboard_with_condition(state, input, |pos| pos.x <= end_pos.x && pos.y <= end_pos.y, |_, _| true)
     }
-    None
+
+    pub fn get_nearest_liftable_pos(input: &Input, state: &State) -> Option<(Pos, Cardboard)> {
+        find_cardboard_with_condition(
+            state,
+            input,
+            |pos| pos.x <= state.pos.x && pos.y <= state.pos.y,
+            |pos, cardboard| {
+                let dist = manhattan_distance(&pos, GATE) as i64;
+                let cardboard_weight = cardboard.0;
+                state
+                    .takahashi_cardboards
+                    .iter()
+                    .map(|Cardboard(_, d)| *d)
+                    .all(|d| d > cardboard_weight * dist)
+            },
+        )
+    }
+
+    fn find_cardboard_with_condition<F, G>(state: &State, input: &Input, pos_filter: F, cardboard_check: G) -> Option<(Pos, Cardboard)>
+    where
+        F: Fn(&Pos) -> bool,
+        G: Fn(Pos, Cardboard) -> bool,
+    {
+        for &pos in input.pos_list_sorted_by_dist.iter().filter(|pos| pos_filter(pos)) {
+            if let Some(cardboard) = state.office[pos.x][pos.y] {
+                if cardboard_check(pos, cardboard) {
+                    return Some((pos, cardboard));
+                }
+            }
+        }
+        None
+    }
 }
 
 fn move_x(state: &mut State, goal: Pos) -> bool {
@@ -220,58 +253,53 @@ fn move_x_or_y(goal: Pos, state: &mut State) {
     }
 }
 
-/// state.pos と goal のマンハッタン距離を求める
-fn manhattan_distance(state: &State, goal: Pos) -> usize {
-    let dx = (state.pos.x as isize - goal.x as isize).abs() as usize;
-    let dy = (state.pos.y as isize - goal.y as isize).abs() as usize;
+fn move_to_pos(goal: Pos, state: &mut State) {
+    while move_x(state, goal) {}
+    while move_y(state, goal) {}
+}
+
+/// pos と goal のマンハッタン距離を求める
+fn manhattan_distance(start: &Pos, goal: Pos) -> usize {
+    let dx = (start.x as isize - goal.x as isize).abs() as usize;
+    let dy = (start.y as isize - goal.y as isize).abs() as usize;
     dx + dy
 }
 
-fn lift_cargeboard(state: &mut State, cardboard: Cardboard) {
-    // 段ボールがある場合のみチェック
-    // 持っている段ボール数が指定の範囲の場合のみ比較
-    if 0 < state.takahashi_cardboards.len() && state.takahashi_cardboards.len() < 8 {
-        let dist = manhattan_distance(state, GATE) as i64;
-        let cardboard_weight = cardboard.0;
-
-        let can_lift = state
-            .takahashi_cardboards
-            .iter()
-            .map(|Cardboard(_, d)| *d)
-            .all(|d| d > cardboard_weight * dist);
-
-        // 持っている段ボールの耐久力が十分なら持ち上げる
-        if can_lift {
-            helper::lift(state);
-            for i in 0..state.takahashi_cardboards.len() - 1 {
-                state.takahashi_cardboards[i].1 -= cardboard_weight * dist;
-            }
-            return;
-        }
-    }
-}
-
 fn solve(input: &Input, state: &mut State, max_sosa: usize) {
-    while let Some(pos) = serach_cardboard(state, input) {
+    let end_pos = Pos { x: N - 1, y: N - 1 };
+    while let Some((pos, _)) = search::serach_cardboard(state, input, end_pos) {
         if max_sosa < state.history.len() {
             break;
         }
 
         // 目的地までの移動
         while state.pos != pos {
-            move_x_or_y(pos, state);
+            move_to_pos(pos, state);
         }
 
         // 段ボールを持ち上げる
         helper::lift(state);
 
+        // 持てる箱を探す
+        while let Some((pos, cardboard)) = search::get_nearest_liftable_pos(input, state) {
+            while state.pos != pos {
+                move_to_pos(pos, state);
+            }
+
+            helper::lift(state);
+
+            let dist = manhattan_distance(&pos, GATE) as i64;
+            let cardboard_weight = cardboard.0;
+            let minus = cardboard_weight * dist;
+
+            for i in 0..state.takahashi_cardboards.len() - 1 {
+                state.takahashi_cardboards[i].1 -= minus;
+            }
+        }
+
         // 出入り口に戻る
         while state.pos != GATE {
-            move_x_or_y(GATE, state);
-
-            if let Some(cardboard) = &state.office[state.pos.x][state.pos.y] {
-                lift_cargeboard(state, *cardboard);
-            }
+            move_to_pos(GATE, state);
         }
 
         state.carried += state.takahashi_cardboards.len();
@@ -291,36 +319,9 @@ fn main() {
     let mut info = Info::new();
     let input = Input::from_stdin();
 
-    let mut best_state0 = State::new(&input);
-
-    for _ in 0..1000 {
-        if info.is_time_up() {
-            break;
-        }
-        let mut state = State::new(&input);
-        solve(&input, &mut state, 1200);
-        if state.carried - 2 > best_state0.carried {
-            best_state0 = state.clone();
-        }
-    }
-
-    let mut best_state1 = State::new(&input);
-    for _ in 0..600 {
-        if info.is_time_up() {
-            break;
-        }
-        let mut state = State::new(&input);
-        solve(&input, &mut state, 3200);
-        if state.carried - 3 > best_state1.carried {
-            best_state1 = state.clone();
-        }
-    }
-
-    while !info.is_time_up() {
-        let mut state = best_state0.clone();
-        solve(&input, &mut state, MAX);
-        info.update_best_answer(&state);
-    }
+    let mut state = State::new(&input);
+    solve(&input, &mut state, MAX);
+    info.update_best_answer(&state);
 
     for i in 0..info.best_answer.1.len() {
         println!("{}", info.best_answer.1[i]);
