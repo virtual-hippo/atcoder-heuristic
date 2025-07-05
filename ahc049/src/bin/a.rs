@@ -1,3 +1,4 @@
+use itertools::{iproduct, Itertools};
 use proconio::input;
 use rand::Rng;
 use std::time::{Duration, Instant};
@@ -69,9 +70,10 @@ impl Info {
 
 #[derive(Clone)]
 pub struct Input {
-    n: usize,         // n=20 (座標)
-    w: Vec<Vec<i64>>, // 重さ
-    d: Vec<Vec<i64>>, // 耐久力
+    n: usize,                          // n=20 (座標)
+    w: Vec<Vec<i64>>,                  // 重さ
+    d: Vec<Vec<i64>>,                  // 耐久力
+    pos_list_sorted_by_dist: Vec<Pos>, // pos のリストを距離順にソートしたもの
 }
 
 impl Input {
@@ -82,7 +84,12 @@ impl Input {
             d: [[i64; n]; n],
         }
 
-        Self { n, w, d }
+        let pos_list_sorted_by_dist = iproduct!(0..N, 0..N)
+            .sorted_by(|a, b| (b.0 + b.1).cmp(&(a.0 + a.1)))
+            .map(|(x, y)| Pos { x, y })
+            .collect::<Vec<_>>();
+
+        Self { n, w, d, pos_list_sorted_by_dist }
     }
 }
 
@@ -103,7 +110,7 @@ pub struct State {
 }
 
 impl State {
-    fn new(Input { n, w, d }: &Input) -> Self {
+    fn new(Input { n, w, d, pos_list_sorted_by_dist: _ }: &Input) -> Self {
         let mut office = vec![vec![]; *n];
         for i in 0..*n {
             for j in 0..*n {
@@ -164,12 +171,10 @@ pub mod helper {
     }
 }
 
-fn serach_cardboard(state: &mut State) -> Option<Pos> {
-    for x in (0..N).rev() {
-        for y in (0..N).rev() {
-            if state.office[x][y].is_some() {
-                return Some(Pos { x, y });
-            }
+fn serach_cardboard(state: &mut State, input: &Input) -> Option<Pos> {
+    for &Pos { x, y } in input.pos_list_sorted_by_dist.iter() {
+        if state.office[x][y].is_some() {
+            return Some(Pos { x, y });
         }
     }
     None
@@ -246,8 +251,8 @@ fn lift_cargeboard(state: &mut State, cardboard: Cardboard) {
     }
 }
 
-fn solve(state: &mut State, max_sosa: usize) {
-    while let Some(pos) = serach_cardboard(state) {
+fn solve(input: &Input, state: &mut State, max_sosa: usize) {
+    while let Some(pos) = serach_cardboard(state, input) {
         if max_sosa < state.history.len() {
             break;
         }
@@ -293,7 +298,7 @@ fn main() {
             break;
         }
         let mut state = State::new(&input);
-        solve(&mut state, 1200);
+        solve(&input, &mut state, 1200);
         if state.carried - 2 > best_state0.carried {
             best_state0 = state.clone();
         }
@@ -305,7 +310,7 @@ fn main() {
             break;
         }
         let mut state = State::new(&input);
-        solve(&mut state, 3200);
+        solve(&input, &mut state, 3200);
         if state.carried - 3 > best_state1.carried {
             best_state1 = state.clone();
         }
@@ -313,7 +318,7 @@ fn main() {
 
     while !info.is_time_up() {
         let mut state = best_state0.clone();
-        solve(&mut state, MAX);
+        solve(&input, &mut state, MAX);
         info.update_best_answer(&state);
     }
 
