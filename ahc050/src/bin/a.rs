@@ -107,14 +107,20 @@ fn update_each_turn(input: &Input, state: &mut State, pos: (usize, usize)) {
             if state.field.prob[i][j] == 0.0 {
                 continue;
             }
-            for (di, dj) in [(!0, 0), (1, 0), (0, !0), (0, 1)] {
-                let mut i2 = i;
-                let mut j2 = j;
-                while i2 + di < N && j2 + dj < N && state.field.s[i2 + di][j2 + dj] == '.' {
+            for (di, dj) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                let mut i2 = i as i64;
+                let mut j2 = j as i64;
+                let n_i64 = N as i64;
+                while 0 <= i2 + di
+                    && i2 + di < n_i64
+                    && 0 <= j2 + dj
+                    && j2 + dj < n_i64
+                    && state.field.s[(i2 + di) as usize][(j2 + dj) as usize] == '.'
+                {
                     i2 += di;
                     j2 += dj;
                 }
-                next[i2][j2] += state.field.prob[i][j] * 0.25;
+                next[i2 as usize][j2 as usize] += state.field.prob[i][j] * 0.25;
             }
         }
     }
@@ -132,7 +138,7 @@ fn update_each_turn(input: &Input, state: &mut State, pos: (usize, usize)) {
     //
     // -----------------------------------------------------------------------------
     let ub = (N * N - input.m - 1) as f64;
-    let ret = state.lives.iter().sum::<f64>();
+    let ret = state.lives.iter().sum::<f64>() - 1.0; // 初期の1.0 を減じる
     let score = (ret / ub * 1e6).round() as i64;
 
     state.score = score;
