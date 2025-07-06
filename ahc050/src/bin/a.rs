@@ -58,6 +58,7 @@ impl Input {
 #[derive(Clone)]
 pub struct FieldState {
     pub s: Vec<Vec<char>>,
+    // 岩が存在する確率
     pub prob: Vec<Vec<f64>>,
 }
 
