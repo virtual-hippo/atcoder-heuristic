@@ -2,6 +2,7 @@ use ac_library::*;
 use itertools::*;
 use proconio::{input, marker::Chars};
 use rand::Rng;
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 pub const N: usize = 40;
@@ -108,42 +109,47 @@ impl State {
         let ret = self.lives.iter().sum::<f64>() - 1.0; // 初期の1.0 を減じる
         (ret / ub * 1e6).round() as i64
     }
+
+    /**
+     * ロボットが存在する確率を更新する関数
+     */
+    fn update_prob(&mut self) {
+        let mut next = vec![vec![0.0; N]; N];
+        for i in 0..N {
+            for j in 0..N {
+                if self.field.prob[i][j] == 0.0 {
+                    continue;
+                }
+                for (di, dj) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                    let mut i2 = i as i64;
+                    let mut j2 = j as i64;
+                    let n_i64 = N as i64;
+                    while 0 <= i2 + di
+                        && i2 + di < n_i64
+                        && 0 <= j2 + dj
+                        && j2 + dj < n_i64
+                        && self.field.s[(i2 + di) as usize][(j2 + dj) as usize] == '.'
+                    {
+                        i2 += di;
+                        j2 += dj;
+                    }
+                    next[i2 as usize][j2 as usize] += self.field.prob[i][j] * 0.25;
+                }
+            }
+        }
+        self.field.prob = next;
+    }
 }
 
 fn update_each_turn(input: &Input, state: &mut State, pos: (usize, usize)) {
-    // -----------------------------------------------------------------------------
-    // 盤面状態の更新
-    // -----------------------------------------------------------------------------
-    let mut next = vec![vec![0.0; N]; N];
-    let mut life = state.lives[state.lives.len() - 1];
-    for i in 0..N {
-        for j in 0..N {
-            if state.field.prob[i][j] == 0.0 {
-                continue;
-            }
-            for (di, dj) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                let mut i2 = i as i64;
-                let mut j2 = j as i64;
-                let n_i64 = N as i64;
-                while 0 <= i2 + di
-                    && i2 + di < n_i64
-                    && 0 <= j2 + dj
-                    && j2 + dj < n_i64
-                    && state.field.s[(i2 + di) as usize][(j2 + dj) as usize] == '.'
-                {
-                    i2 += di;
-                    j2 += dj;
-                }
-                next[i2 as usize][j2 as usize] += state.field.prob[i][j] * 0.25;
-            }
-        }
-    }
-    state.field.prob = next;
+    state.update_prob();
+
     let (bi, bj) = pos;
     if state.field.s[bi][bj] == '#' {
         panic!("({}, {}) is already blocked (turn {})", bi, bj, state.lives.len() - 1);
     }
-    life -= state.field.prob[bi][bj];
+
+    let life = state.lives[state.lives.len() - 1] - state.field.prob[bi][bj];
     state.lives.push(life);
     state.field.prob[bi][bj] = 0.0;
     state.field.s[bi][bj] = '#';
@@ -156,28 +162,44 @@ fn update_each_turn(input: &Input, state: &mut State, pos: (usize, usize)) {
 }
 
 /**
+ * 現在のstate.field.probで最小値を持つ位置を探す
+ */
+fn find_min_prob_position(state: &State) -> Vec<(usize, usize)> {
+    let mut map = BTreeMap::new();
+
+    for i in 0..N {
+        for j in 0..N {
+            if state.field.s[i][j] == '.' {
+                let key = (state.field.prob[i][j] * 1e9) as i64;
+                map.entry(key).or_insert_with(|| vec![]).push((i, j));
+            }
+        }
+    }
+    map.into_iter().next().map(|(_, v)| v).unwrap_or_else(|| vec![])
+}
+
+/**
  * 確率の低い位置を貪欲に選んで解を構築する関数
  */
 fn build_initial_answer(input: &Input, state: &mut State) {
     let total_turns = N * N - input.m;
-    let koho = iproduct!(0..N, 0..N).filter(|&(i, j)| input.s[i][j] != '#').collect::<Vec<_>>();
+
+    // 最初の候補を探す
+    state.update_prob();
+    let koho = find_min_prob_position(state);
+    // 状態を戻す
+    state.field = State::build_field(input);
+
     let mut next = koho[state.rng.gen_range(0..koho.len())];
 
     for _ in 0..total_turns {
         update_each_turn(input, state, next);
 
-        // 現在のstate.field.probで最小値を持つ位置を探す
-        let mut min_prob = f64::MAX;
-
-        for i in 0..N {
-            for j in 0..N {
-                // ブロックされていない位置のみを考慮
-                if state.field.s[i][j] == '.' && state.field.prob[i][j] < min_prob {
-                    min_prob = state.field.prob[i][j];
-                    next = (i, j);
-                }
-            }
+        let koho = find_min_prob_position(state);
+        if koho.is_empty() {
+            break; // これ以上ブロックできる位置がない場合は終了
         }
+        next = koho[state.rng.gen_range(0..koho.len())];
     }
 }
 
