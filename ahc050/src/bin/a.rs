@@ -1,8 +1,6 @@
-use ac_library::*;
-use itertools::*;
+// use itertools::*;
 use proconio::{input, marker::Chars};
 use rand::Rng;
-use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 pub const N: usize = 40;
@@ -45,7 +43,7 @@ impl Info {
 
 #[derive(Clone)]
 pub struct Input {
-    n: usize,          // n=40
+    _n: usize,         // n=40
     m: usize,          //
     s: Vec<Vec<char>>, // 初期盤面
 }
@@ -58,7 +56,7 @@ impl Input {
             s: [Chars; n],
         }
 
-        Self { n, m, s }
+        Self { _n: n, m, s }
     }
 }
 
@@ -92,6 +90,27 @@ impl State {
         }
     }
 
+    fn reset(&mut self, input: &Input) {
+        self.field = Self::build_field(input);
+        self.lives = vec![1.0];
+        self.answer = vec![];
+        self.score = 0;
+    }
+
+    fn reset_prob(&mut self) {
+        if self.lives.len() > 1 {
+            panic!("reset_prob should be called only at the beginning of the operation");
+        }
+        let initial_prob = 1.0 / (N * N - self.m) as f64;
+        for i in 0..N {
+            for j in 0..N {
+                if self.field.s[i][j] == '.' {
+                    self.field.prob[i][j] = initial_prob;
+                }
+            }
+        }
+    }
+
     fn build_field(input: &Input) -> FieldState {
         let mut prob = vec![vec![0.0; N]; N];
         for i in 0..N {
@@ -104,7 +123,7 @@ impl State {
         FieldState { s: input.s.clone(), prob }
     }
 
-    fn print_answer(&self) {
+    fn _print_answer(&self) {
         for &(i, j) in &self.answer {
             println!("{} {}", i, j);
         }
@@ -120,24 +139,31 @@ impl State {
      * ロボットが存在する確率を更新する関数
      */
     fn update_prob(&mut self) {
+        const DIRS: [(i64, i64); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
         let mut next = vec![vec![0.0; N]; N];
         for i in 0..N {
             for j in 0..N {
                 if self.field.prob[i][j] == 0.0 {
                     continue;
                 }
-                for (di, dj) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                for &(di, dj) in &DIRS {
                     let mut i2 = i as i64;
                     let mut j2 = j as i64;
                     let n_i64 = N as i64;
-                    while 0 <= i2 + di
-                        && i2 + di < n_i64
-                        && 0 <= j2 + dj
-                        && j2 + dj < n_i64
-                        && self.field.s[(i2 + di) as usize][(j2 + dj) as usize] == '.'
-                    {
-                        i2 += di;
-                        j2 += dj;
+                    loop {
+                        let next_i = i2 + di;
+                        let next_j = j2 + dj;
+
+                        if next_i < 0 || next_i >= n_i64 || next_j < 0 || next_j >= n_i64 {
+                            break;
+                        }
+
+                        if self.field.s[next_i as usize][next_j as usize] != '.' {
+                            break;
+                        }
+
+                        i2 = next_i;
+                        j2 = next_j;
                     }
                     next[i2 as usize][j2 as usize] += self.field.prob[i][j] * 0.25;
                 }
@@ -147,7 +173,7 @@ impl State {
     }
 }
 
-fn update_each_turn(input: &Input, state: &mut State, pos: (usize, usize)) {
+fn update_each_turn(state: &mut State, pos: (usize, usize)) {
     state.update_prob();
 
     let (bi, bj) = pos;
@@ -171,35 +197,43 @@ fn update_each_turn(input: &Input, state: &mut State, pos: (usize, usize)) {
  * 現在のstate.field.probで最小値を持つ位置を探す
  */
 fn find_min_prob_position(state: &State) -> Vec<(usize, usize)> {
-    let mut map = BTreeMap::new();
+    let mut min_prob = f64::MAX;
+    let mut min_positions = Vec::with_capacity(8);
 
     for i in 0..N {
         for j in 0..N {
             if state.field.s[i][j] == '.' {
-                let key = (state.field.prob[i][j] * 1e9) as i64;
-                map.entry(key).or_insert_with(|| vec![]).push((i, j));
+                let prob = state.field.prob[i][j];
+                if prob < min_prob {
+                    min_prob = prob;
+                    min_positions.clear();
+                    min_positions.push((i, j));
+                } else if prob == min_prob {
+                    min_positions.push((i, j));
+                }
             }
         }
     }
-    map.into_iter().next().map(|(_, v)| v).unwrap_or_else(|| vec![])
+
+    min_positions
 }
 
 /**
  * 確率の低い位置を貪欲に選んで解を構築する関数
  */
-fn build_initial_answer(input: &Input, state: &mut State) {
+fn greedy_solve(input: &Input, state: &mut State) {
     let total_turns = N * N - input.m;
 
     // 最初の候補を探す
     state.update_prob();
     let koho = find_min_prob_position(state);
     // 状態を戻す
-    state.field = State::build_field(input);
+    state.reset_prob();
 
     let mut next = koho[state.rng.gen_range(0..koho.len())];
 
     for _ in 0..total_turns {
-        update_each_turn(input, state, next);
+        update_each_turn(state, next);
 
         let koho = find_min_prob_position(state);
         if koho.is_empty() {
@@ -209,16 +243,23 @@ fn build_initial_answer(input: &Input, state: &mut State) {
     }
 }
 
-fn solve(input: &Input, info: &mut Info, state: &mut State) {
-    for i in 0..10 {
-        if info.is_time_up() {
-            eprintln!("Time is up at iteration {}", i);
-            break;
-        }
-        build_initial_answer(input, state);
+fn build_initial_answer(input: &Input, info: &mut Info, state: &mut State) {
+    let mut iteration = 0;
+
+    while !info.is_time_up() {
+        greedy_solve(input, state);
+
         info.update_best_answer(state.score, state.answer.clone());
-        *state = State::new(&input);
+
+        state.reset(input);
+        iteration += 1;
     }
+    eprintln!("Total iterations: {} in build_initial_answer", iteration);
+}
+
+fn solve(input: &Input, info: &mut Info, state: &mut State) {
+    // 初期解を構築
+    build_initial_answer(input, info, state);
 }
 
 fn main() {
