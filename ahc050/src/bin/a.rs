@@ -198,7 +198,7 @@ fn update_each_turn(state: &mut State, pos: (usize, usize)) {
  */
 fn find_min_prob_position(state: &State) -> Vec<(usize, usize)> {
     let mut min_prob = i64::MAX;
-    let mut min_positions = Vec::with_capacity(8);
+    let mut min_positions = vec![];
 
     for i in 0..N {
         for j in 0..N {
@@ -246,7 +246,7 @@ fn greedy_solve(input: &Input, state: &mut State) {
 fn build_initial_answer(input: &Input, info: &mut Info, state: &mut State) {
     let mut iteration = 0;
 
-    while !info.is_time_up() {
+    while iteration < 100 && !info.is_time_up() {
         greedy_solve(input, state);
 
         info.update_best_answer(state.score, state.answer.clone());
@@ -257,9 +257,83 @@ fn build_initial_answer(input: &Input, info: &mut Info, state: &mut State) {
     eprintln!("Total iterations: {} in build_initial_answer", iteration);
 }
 
+fn evaluate(input: &Input, order: &Vec<(usize, usize)>) -> i64 {
+    let mut state = State::new(input);
+    for &pos in order {
+        update_each_turn(&mut state, pos);
+    }
+    state.score
+}
+
 fn solve(input: &Input, info: &mut Info, state: &mut State) {
     // 初期解を構築
     build_initial_answer(input, info, state);
+
+    let mut p = info.best_answer.1.clone();
+
+    // 初期解の評価
+    let mut current_score = info.best_answer.0;
+    let mut best_score = current_score;
+    let mut best_order = info.best_answer.1.clone();
+
+    // 温度パラメータ
+    let start_temp = 5000.0;
+    let end_temp = 10.0;
+
+    let mut iter_count = 0;
+
+    while !info.is_time_up() {
+        iter_count += 1;
+
+        // 温度の計算
+        let progress = info.start_time.elapsed().as_millis() as f64 / info.time_limit.as_millis() as f64;
+        let temp = start_temp * ((end_temp / start_temp) as f64).powf(progress);
+
+        // 近傍解の生成（2つの要素をswap）
+        let len = p.len();
+        let i = state.rng.gen_range(0..len - 400);
+        let j = state.rng.gen_range(0..len - 400);
+
+        if i == j {
+            continue;
+        }
+
+        // swap
+        p.swap(i, j);
+
+        // 新しい解の評価
+        let new_score = evaluate(input, &p);
+
+        // 受理判定
+        let delta = new_score - current_score;
+        if delta > 0 || state.rng.gen::<f64>() < (delta as f64 / temp).exp() {
+            // 受理
+            current_score = new_score;
+
+            if new_score > best_score {
+                best_score = new_score;
+                best_order = p.clone();
+                info.update_best_answer(best_score, best_order.clone());
+                eprintln!(
+                    "Update best score: {} (iter: {}, time: {:.3}s)",
+                    best_score,
+                    iter_count,
+                    info.start_time.elapsed().as_secs_f64()
+                );
+            }
+        } else {
+            // 棄却（元に戻す）
+            p.swap(i, j);
+        }
+    }
+
+    // 最適解で最終的なシミュレーションを実行
+    for &pos in &best_order {
+        update_each_turn(state, pos);
+    }
+
+    eprintln!("Total iterations: {}", iter_count);
+    eprintln!("Final best score: {}", best_score);
 }
 
 fn main() {
