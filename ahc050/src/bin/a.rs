@@ -197,13 +197,13 @@ fn update_each_turn(state: &mut State, pos: (usize, usize)) {
  * 現在のstate.field.probで最小値を持つ位置を探す
  */
 fn find_min_prob_position(state: &State) -> Vec<(usize, usize)> {
-    let mut min_prob = f64::MAX;
+    let mut min_prob = i64::MAX;
     let mut min_positions = Vec::with_capacity(8);
 
     for i in 0..N {
         for j in 0..N {
             if state.field.s[i][j] == '.' {
-                let prob = state.field.prob[i][j];
+                let prob = (state.field.prob[i][j] * 1e8).round() as i64; // 1e8倍して整数に変換
                 if prob < min_prob {
                     min_prob = prob;
                     min_positions.clear();
