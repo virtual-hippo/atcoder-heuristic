@@ -155,12 +155,34 @@ fn update_each_turn(input: &Input, state: &mut State, pos: (usize, usize)) {
     state.answer.push((bi, bj));
 }
 
-fn solve(input: &Input, info: &mut Info, state: &mut State) {
-    let p = iproduct!(0..N, 0..N).filter(|&(i, j)| input.s[i][j] != '#').collect::<Vec<_>>();
+/**
+ * 確率の低い位置を貪欲に選んで解を構築する関数
+ */
+fn build_initial_answer(input: &Input, state: &mut State) {
+    let total_turns = N * N - input.m;
+    let koho = iproduct!(0..N, 0..N).filter(|&(i, j)| input.s[i][j] != '#').collect::<Vec<_>>();
+    let mut next = koho[state.rng.gen_range(0..koho.len())];
 
-    for &pos in p.iter() {
-        update_each_turn(input, state, pos);
+    for _ in 0..total_turns {
+        update_each_turn(input, state, next);
+
+        // 現在のstate.field.probで最小値を持つ位置を探す
+        let mut min_prob = f64::MAX;
+
+        for i in 0..N {
+            for j in 0..N {
+                // ブロックされていない位置のみを考慮
+                if state.field.s[i][j] == '.' && state.field.prob[i][j] < min_prob {
+                    min_prob = state.field.prob[i][j];
+                    next = (i, j);
+                }
+            }
+        }
     }
+}
+
+fn solve(input: &Input, info: &mut Info, state: &mut State) {
+    build_initial_answer(input, state);
 }
 
 fn main() {
