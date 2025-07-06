@@ -15,7 +15,7 @@ struct Info {
 impl Info {
     fn new() -> Self {
         Self {
-            time_limit: Duration::from_millis(1960),
+            time_limit: Duration::from_millis(1950),
             start_time: Instant::now(),
             best_answer: (0, vec![]),
         }
@@ -196,48 +196,64 @@ fn update_each_turn(state: &mut State, pos: (usize, usize)) {
 /**
  * 現在のstate.field.probで最小値を持つ位置を探す
  */
-fn find_min_prob_position(state: &State) -> Vec<(usize, usize)> {
+fn find_min_prob_position(state: &State, random_flag: bool) -> Vec<(usize, usize)> {
     let mut min_prob = i64::MAX;
+    let mut second_min_prob = i64::MAX;
     let mut min_positions = vec![];
+    let mut second_min_positions = vec![];
 
     for i in 0..N {
         for j in 0..N {
             if state.field.s[i][j] == '.' {
                 let prob = (state.field.prob[i][j] * 1e8).round() as i64; // 1e8倍して整数に変換
                 if prob < min_prob {
+                    second_min_prob = min_prob;
+                    second_min_positions = min_positions.clone();
                     min_prob = prob;
-                    min_positions.clear();
+                    min_positions = vec![];
                     min_positions.push((i, j));
                 } else if prob == min_prob {
                     min_positions.push((i, j));
+                } else if prob < second_min_prob {
+                    second_min_prob = prob;
+                    second_min_positions = vec![];
+                    second_min_positions.push((i, j));
+                } else if prob == second_min_prob {
+                    second_min_positions.push((i, j));
                 }
             }
         }
     }
 
-    min_positions
+    if random_flag && !second_min_positions.is_empty() {
+        second_min_positions
+    } else {
+        min_positions
+    }
 }
 
 /**
  * 確率の低い位置を貪欲に選んで解を構築する関数
  */
-fn greedy_solve(input: &Input, state: &mut State) {
+fn greedy_solve(input: &Input, state: &mut State, random_flag: bool) {
     let total_turns = N * N - input.m;
 
     // 最初の候補を探す
     state.update_prob();
-    let koho = find_min_prob_position(state);
+    let koho = find_min_prob_position(state, false);
     // 状態を戻す
     state.reset_prob();
 
     let mut next = koho[state.rng.gen_range(0..koho.len())];
 
-    for _ in 0..total_turns {
+    for t in 0..total_turns {
         update_each_turn(state, next);
 
-        let koho = find_min_prob_position(state);
+        let random_flag = t > 100 && random_flag && state.rng.gen_bool(0.4);
+
+        let koho = find_min_prob_position(state, random_flag);
         if koho.is_empty() {
-            break; // これ以上ブロックできる位置がない場合は終了
+            break;
         }
         next = koho[state.rng.gen_range(0..koho.len())];
     }
@@ -246,8 +262,8 @@ fn greedy_solve(input: &Input, state: &mut State) {
 fn build_initial_answer(input: &Input, info: &mut Info, state: &mut State) {
     let mut iteration = 0;
 
-    while iteration < 100 && !info.is_time_up() {
-        greedy_solve(input, state);
+    while iteration < 120 && !info.is_time_up() {
+        greedy_solve(input, state, iteration > 10 && iteration % 2 == 0);
 
         info.update_best_answer(state.score, state.answer.clone());
 
@@ -273,11 +289,9 @@ fn solve(input: &Input, info: &mut Info, state: &mut State) {
 
     // 初期解の評価
     let mut current_score = info.best_answer.0;
-    let mut best_score = current_score;
-    let mut best_order = info.best_answer.1.clone();
 
     // 温度パラメータ
-    let start_temp = 5000.0;
+    let start_temp = 3000.0;
     let end_temp = 10.0;
 
     let mut iter_count = 0;
@@ -304,19 +318,21 @@ fn solve(input: &Input, info: &mut Info, state: &mut State) {
         // 新しい解の評価
         let new_score = evaluate(input, &p);
 
+        if info.is_time_up() {
+            break;
+        }
+
         // 受理判定
         let delta = new_score - current_score;
         if delta > 0 || state.rng.gen::<f64>() < (delta as f64 / temp).exp() {
             // 受理
             current_score = new_score;
 
-            if new_score > best_score {
-                best_score = new_score;
-                best_order = p.clone();
-                info.update_best_answer(best_score, best_order.clone());
+            if new_score > info.best_answer.0 {
+                info.update_best_answer(current_score, p.clone());
                 eprintln!(
                     "Update best score: {} (iter: {}, time: {:.3}s)",
-                    best_score,
+                    info.best_answer.0,
                     iter_count,
                     info.start_time.elapsed().as_secs_f64()
                 );
@@ -326,14 +342,8 @@ fn solve(input: &Input, info: &mut Info, state: &mut State) {
             p.swap(i, j);
         }
     }
-
-    // 最適解で最終的なシミュレーションを実行
-    for &pos in &best_order {
-        update_each_turn(state, pos);
-    }
-
     eprintln!("Total iterations: {}", iter_count);
-    eprintln!("Final best score: {}", best_score);
+    eprintln!("Final best score: {}", info.best_answer.0);
 }
 
 fn main() {
