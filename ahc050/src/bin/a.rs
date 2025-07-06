@@ -35,6 +35,12 @@ impl Info {
             false
         }
     }
+
+    fn print_answer(&self) {
+        for &(i, j) in &self.best_answer.1 {
+            println!("{} {}", i, j);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -204,7 +210,15 @@ fn build_initial_answer(input: &Input, state: &mut State) {
 }
 
 fn solve(input: &Input, info: &mut Info, state: &mut State) {
-    build_initial_answer(input, state);
+    for i in 0..10 {
+        if info.is_time_up() {
+            eprintln!("Time is up at iteration {}", i);
+            break;
+        }
+        build_initial_answer(input, state);
+        info.update_best_answer(state.score, state.answer.clone());
+        *state = State::new(&input);
+    }
 }
 
 fn main() {
@@ -213,6 +227,6 @@ fn main() {
     let mut state = State::new(&input);
 
     solve(&input, &mut info, &mut state);
-    state.print_answer();
-    eprintln!("Score = {}", state.score);
+    info.print_answer();
+    eprintln!("Score = {}", info.best_answer.0);
 }
