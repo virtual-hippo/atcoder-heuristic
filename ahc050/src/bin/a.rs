@@ -154,95 +154,12 @@ fn update_each_turn(input: &Input, state: &mut State, pos: (usize, usize)) {
     state.answer.push((bi, bj));
 }
 
-// 与えられた順序でシミュレーションを実行してスコアを計算
-fn evaluate(input: &Input, order: &Vec<(usize, usize)>) -> i64 {
-    let mut state = State::new(input);
-    for &pos in order {
-        update_each_turn(input, &mut state, pos);
-    }
-    state.score
-}
-
-// 焼きなまし法
 fn solve(input: &Input, info: &mut Info, state: &mut State) {
-    let mut p = iproduct!(0..N, 0..N).filter(|&(i, j)| input.s[i][j] != '#').collect::<Vec<_>>();
+    let p = iproduct!(0..N, 0..N).filter(|&(i, j)| input.s[i][j] != '#').collect::<Vec<_>>();
 
-    // 初期解の評価
-    let mut current_score = evaluate(input, &p);
-    let mut best_score = current_score;
-    let mut best_order = p.clone();
-
-    // 温度パラメータ
-    let start_temp = 5000.0;
-    let end_temp = 10.0;
-
-    let mut rng = rand::thread_rng();
-    let mut iter_count = 0;
-
-    while !info.is_time_up() {
-        iter_count += 1;
-
-        // 温度の計算
-        let progress = info.start_time.elapsed().as_millis() as f64 / info.time_limit.as_millis() as f64;
-        let temp = start_temp * ((end_temp / start_temp) as f64).powf(progress);
-
-        // 近傍解の生成（2つの要素をswap）
-        let len = p.len();
-        let i = rng.gen_range(0..len);
-        let j = rng.gen_range(0..len);
-
-        if i == j {
-            continue;
-        }
-
-        // swap
-        p.swap(i, j);
-
-        // 新しい解の評価
-        let new_score = evaluate(input, &p);
-
-        // 受理判定
-        let delta = new_score - current_score;
-        if delta > 0 || rng.gen::<f64>() < (delta as f64 / temp).exp() {
-            // 受理
-            current_score = new_score;
-
-            if new_score > best_score {
-                best_score = new_score;
-                best_order = p.clone();
-                info.update_best_answer(best_score, best_order.clone());
-                eprintln!(
-                    "Update best score: {} (iter: {}, time: {:.3}s)",
-                    best_score,
-                    iter_count,
-                    info.start_time.elapsed().as_secs_f64()
-                );
-            }
-        } else {
-            // 棄却（元に戻す）
-            p.swap(i, j);
-        }
-
-        // 定期的に進捗を表示
-        if iter_count % 10000 == 0 {
-            eprintln!(
-                "Iter: {}, Current: {}, Best: {}, Temp: {:.1}, Time: {:.3}s",
-                iter_count,
-                current_score,
-                best_score,
-                temp,
-                info.start_time.elapsed().as_secs_f64()
-            );
-        }
-    }
-
-    // 最適解で最終的なシミュレーションを実行
-    for &pos in &best_order {
+    for &pos in p.iter() {
         update_each_turn(input, state, pos);
     }
-
-    eprintln!("Total iterations: {}", iter_count);
-    eprintln!("Final best score: {}", best_score);
 }
 
 fn main() {
