@@ -193,6 +193,16 @@ fn update_each_turn(state: &mut State, pos: (usize, usize)) {
     state.answer.push((bi, bj));
 }
 
+fn create_simulated_state(state: &State, pos_list: &[(usize, usize)]) -> State {
+    let mut new_state = state.clone();
+
+    for pos in pos_list {
+        update_each_turn(&mut new_state, *pos);
+    }
+
+    new_state
+}
+
 /**
  * 現在のstate.field.probで最小値を持つ位置を探す
  */
