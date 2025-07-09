@@ -1,4 +1,4 @@
-// use itertools::*;
+use itertools::*;
 use proconio::{input, marker::Chars};
 use rand::Rng;
 use std::time::{Duration, Instant};
@@ -15,7 +15,7 @@ struct Info {
 impl Info {
     fn new() -> Self {
         Self {
-            time_limit: Duration::from_millis(1950),
+            time_limit: Duration::from_millis(1800),
             start_time: Instant::now(),
             best_answer: (0, vec![]),
         }
@@ -206,73 +206,127 @@ fn create_simulated_state(state: &State, pos_list: &[(usize, usize)]) -> State {
 /**
  * 現在のstate.field.probで最小値を持つ位置を探す
  */
-fn find_min_prob_position(state: &State, random_flag: bool) -> Vec<(usize, usize)> {
-    let mut min_prob = i64::MAX;
-    let mut second_min_prob = i64::MAX;
-    let mut min_positions = vec![];
-    let mut second_min_positions = vec![];
 
-    for i in 0..N {
-        for j in 0..N {
+fn find_min_prob_position(state: &mut State, geta: usize) -> Vec<(usize, usize)> {
+    let mut min_prob = i64::MAX;
+    let mut min_positions = vec![];
+
+    for i in geta..(N - geta) {
+        for j in geta..(N - geta) {
             if state.field.s[i][j] == '.' {
                 let prob = (state.field.prob[i][j] * 1e8).round() as i64; // 1e8倍して整数に変換
                 if prob < min_prob {
-                    second_min_prob = min_prob;
-                    second_min_positions = min_positions.clone();
                     min_prob = prob;
                     min_positions = vec![];
                     min_positions.push((i, j));
                 } else if prob == min_prob {
                     min_positions.push((i, j));
-                } else if prob < second_min_prob {
-                    second_min_prob = prob;
-                    second_min_positions = vec![];
-                    second_min_positions.push((i, j));
-                } else if prob == second_min_prob {
-                    second_min_positions.push((i, j));
                 }
             }
         }
     }
 
-    if random_flag && !second_min_positions.is_empty() {
-        second_min_positions
+    min_positions
+}
+
+/**
+ * 岩を置く候補を探す関数
+ */
+fn find_koho(state: &mut State, geta: usize) -> Vec<(usize, usize)> {
+    let min_positions = find_min_prob_position(state, geta);
+    const DIRS: [(i64, i64); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+
+    let it = if min_positions.len() > 800 {
+        min_positions.iter().skip(min_positions.len() - 800)
     } else {
-        min_positions
+        min_positions.iter().skip(0)
+    };
+
+    // min_positions の各位置について周囲4マスの合計を求める
+    // その合計が最大の位置を選ぶ
+    let ret = it
+        .map(|&(i, j)| {
+            // 周囲4マスを見て state.field.prob[bi][bj] の合計を求める
+            let sum_prob = DIRS
+                .iter()
+                .map(|&(di, dj)| (i as i64 + di, j as i64 + dj))
+                .filter(|&(ni, nj)| ni >= 0 && ni < N as i64 && nj >= 0 && nj < N as i64)
+                .map(|(ni, nj)| (ni as usize, nj as usize))
+                .filter(|&(ni, nj)| state.field.s[ni][nj] == '.')
+                .map(|(ni, nj)| (state.field.prob[ni][nj] * 1e8).round() as i64)
+                .sum::<i64>();
+
+            (sum_prob, (i, j))
+        })
+        .sorted_by(|a, b| b.cmp(&a))
+        .take(12)
+        .map(|(_, (i, j))| (i, j)) // 位置だけを取り出す
+        .collect::<Vec<_>>();
+    ret
+}
+
+/**
+ * 岩を置く場所を決める
+ */
+fn decide_position(state: &mut State, koho: &[(usize, usize)]) -> (usize, usize) {
+    if koho.is_empty() {
+        panic!("No valid positions found");
     }
+
+    // return koho[state.rng.gen_range(0..koho.len())];
+
+    let mut ret = ((0, 0), 0.0);
+
+    for pos in koho {
+        let mut simulated_state = create_simulated_state(state, &[*pos]);
+        for _ in 0..10.min(N * N - state.lives.len() - 1) {
+            simulated_state.update_prob();
+        }
+
+        let now_sum_prob = simulated_state.field.prob.iter().flatten().map(|v| v.powf(5.0)).sum::<f64>();
+
+        if ret.1 == 0.0 {
+            ret = (*pos, now_sum_prob);
+            continue;
+        }
+        if now_sum_prob > ret.1 {
+            ret = (*pos, now_sum_prob);
+        }
+    }
+    ret.0
 }
 
 /**
  * 確率の低い位置を貪欲に選んで解を構築する関数
  */
-fn greedy_solve(input: &Input, state: &mut State, random_flag: bool) {
+fn greedy_solve(input: &Input, state: &mut State, _random_flag: bool) {
     let total_turns = N * N - input.m;
 
     // 最初の候補を探す
     state.update_prob();
-    let koho = find_min_prob_position(state, false);
+    let koho = find_koho(state, 10);
     // 状態を戻す
     state.reset_prob();
 
-    let mut next = koho[state.rng.gen_range(0..koho.len())];
+    let mut next = decide_position(state, &koho);
 
     for t in 0..total_turns {
         update_each_turn(state, next);
 
-        let random_flag = t > 100 && random_flag && state.rng.gen_bool(0.4);
+        let geta = if t < 10 { 6 } else { 0 };
 
-        let koho = find_min_prob_position(state, random_flag);
+        let koho = find_koho(state, geta);
         if koho.is_empty() {
             break;
         }
-        next = koho[state.rng.gen_range(0..koho.len())];
+        next = decide_position(state, &koho);
     }
 }
 
 fn build_initial_answer(input: &Input, info: &mut Info, state: &mut State) {
     let mut iteration = 0;
 
-    while iteration < 120 && !info.is_time_up() {
+    while iteration < 1 && !info.is_time_up() {
         greedy_solve(input, state, iteration > 10 && iteration % 2 == 0);
 
         info.update_best_answer(state.score, state.answer.clone());
@@ -294,66 +348,6 @@ fn evaluate(input: &Input, order: &Vec<(usize, usize)>) -> i64 {
 fn solve(input: &Input, info: &mut Info, state: &mut State) {
     // 初期解を構築
     build_initial_answer(input, info, state);
-
-    let mut p = info.best_answer.1.clone();
-
-    // 初期解の評価
-    let mut current_score = info.best_answer.0;
-
-    // 温度パラメータ
-    let start_temp = 3000.0;
-    let end_temp = 10.0;
-
-    let mut iter_count = 0;
-
-    while !info.is_time_up() {
-        iter_count += 1;
-
-        // 温度の計算
-        let progress = info.start_time.elapsed().as_millis() as f64 / info.time_limit.as_millis() as f64;
-        let temp = start_temp * ((end_temp / start_temp) as f64).powf(progress);
-
-        // 近傍解の生成（2つの要素をswap）
-        let len = p.len();
-        let i = state.rng.gen_range(0..len - 400);
-        let j = state.rng.gen_range(0..len - 400);
-
-        if i == j {
-            continue;
-        }
-
-        // swap
-        p.swap(i, j);
-
-        // 新しい解の評価
-        let new_score = evaluate(input, &p);
-
-        if info.is_time_up() {
-            break;
-        }
-
-        // 受理判定
-        let delta = new_score - current_score;
-        if delta > 0 || state.rng.gen::<f64>() < (delta as f64 / temp).exp() {
-            // 受理
-            current_score = new_score;
-
-            if new_score > info.best_answer.0 {
-                info.update_best_answer(current_score, p.clone());
-                eprintln!(
-                    "Update best score: {} (iter: {}, time: {:.3}s)",
-                    info.best_answer.0,
-                    iter_count,
-                    info.start_time.elapsed().as_secs_f64()
-                );
-            }
-        } else {
-            // 棄却（元に戻す）
-            p.swap(i, j);
-        }
-    }
-    eprintln!("Total iterations: {}", iter_count);
-    eprintln!("Final best score: {}", info.best_answer.0);
 }
 
 fn main() {
