@@ -259,52 +259,15 @@ fn greedy_solve(input: &Input, state: &mut State, random_flag: bool) {
     }
 }
 
-fn greedy_solve2(input: &Input, state: &mut State, random_flag: bool) {
-    let total_turns = N * N - input.m;
-    let start = state.answer.len();
-
-    let koho = find_min_prob_position(state, false);
-
-    let mut next = koho[state.rng.gen_range(0..koho.len())];
-
-    for t in start..total_turns {
-        update_each_turn(state, next);
-
-        let random_flag = t > 100 && random_flag && state.rng.gen_bool(0.5);
-
-        let koho = find_min_prob_position(state, random_flag);
-        if koho.is_empty() {
-            break;
-        }
-        next = koho[state.rng.gen_range(0..koho.len())];
-    }
-}
-
 fn build_initial_answer(input: &Input, info: &mut Info, state: &mut State) {
     let mut iteration = 0;
 
-    while iteration < 100 && !info.is_time_up() {
+    while iteration < 120 && !info.is_time_up() {
         greedy_solve(input, state, iteration > 10 && iteration % 2 == 0);
 
         info.update_best_answer(state.score, state.answer.clone());
 
         state.reset(input);
-        iteration += 1;
-    }
-
-    let mut state2 = State::new(input);
-    for i in 0..800 {
-        update_each_turn(&mut state2, info.best_answer.1[i]);
-    }
-    let stored_state = state2.clone();
-    *state = state2;
-
-    while iteration < 60 && !info.is_time_up() {
-        greedy_solve2(input, state, iteration > 10 && iteration % 2 == 0);
-
-        info.update_best_answer(state.score, state.answer.clone());
-
-        *state = stored_state.clone();
         iteration += 1;
     }
     eprintln!("Total iterations: {} in build_initial_answer", iteration);
